@@ -495,7 +495,7 @@ class RenphoWeight:
                             raise APIError(f"API request failed {method} {url}: {parsed_response.get('status_message')}")
                 except (aiohttp.ClientResponseError, aiohttp.ClientConnectionError) as e:
                     _LOGGER.error(f"Client error: {e}")
-                    raise APIError(f"API request failed {method} {url}") from e
+                    raise APIError(f"API request failed {method} {url} {e}") from e
 
     @staticmethod
     def encrypt_password(public_key_str, password):
@@ -1139,7 +1139,7 @@ async def get_device_info(request: Request, renpho: RenphoWeight = Depends(get_c
         device_info = await renpho.get_device_info()
         if device_info:
             return APIResponse(status="success", message="Fetched device info.", data=device_info)
-        #raise HTTPException(status_code=404, detail="Device info not found")
+        raise HTTPException(status_code=404, detail="Device info not found")
     except Exception as e:
         _LOGGER.error(f"Error fetching device info: {e}")
         return APIResponse(status="error", message=str(e))

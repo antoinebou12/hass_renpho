@@ -728,6 +728,7 @@ class RenphoWeight:
                 return None
 
             # Check for successful response code
+            _LOGGER.error(parsed)
             if parsed.get("status_code") == "20000" and "device_binds_ary" in parsed:
                 device_info = [DeviceBind(**device) for device in parsed["device_binds_ary"]]
                 self.device_info = device_info

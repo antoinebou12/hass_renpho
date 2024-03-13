@@ -729,10 +729,13 @@ class RenphoWeight:
 
             # Check for successful response code
             _LOGGER.error(parsed)
-            if parsed.get("status_code") == "20000" and "device_binds_ary" in parsed:
-                device_info = [DeviceBind(**device) for device in parsed["device_binds_ary"]]
-                self.device_info = device_info
-                return device_info
+            if "status_code" in parsed and parsed["status_code"] == "20000":
+                if "device_binds_ary" not in parsed:
+                    _LOGGER.error("No devices found in the response.")
+                if measurements := parsed["device_binds_ary"]:
+                    device_info = [DeviceBind(**device) for device in measurements]
+                    self.device_info = device_info
+                    return device_info
             else:
                 # Handling different error scenarios
                 if "status_code" not in parsed:

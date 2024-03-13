@@ -621,9 +621,8 @@ class RenphoWeight:
                     method=None
                 )
 
-            # Check if the response is valid and contains 'scale_users'
             if "scale_users" in parsed:
-                # Update the 'users' attribute with parsed and validated ScaleUser objects
+                _LOGGER.error(parsed)
                 self.users = [Users(**user) for user in parsed["scale_users"]]
             else:
                 _LOGGER.error("Failed to fetch scale users or no scale users found in the response.")

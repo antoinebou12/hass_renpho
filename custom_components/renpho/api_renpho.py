@@ -6,12 +6,14 @@ from base64 import b64encode
 from typing import Callable, Dict, Final, List, Optional, Union
 
 import aiohttp
+from pydantic import ValidationError
 from aiohttp import ClientTimeout
 from aiohttp_socks import ProxyConnector
 from Crypto.Cipher import PKCS1_v1_5
 from Crypto.PublicKey import RSA
 
 from .const import CONF_PUBLIC_KEY
+from .http_fingerprint import ClientFingerprint, merge_headers, renpho_ios_default
 
 METRIC_TYPE_WEIGHT: Final = "weight"
 METRIC_TYPE_GROWTH_RECORD: Final = "growth_record"
@@ -47,7 +49,15 @@ class RenphoWeight:
         user_id (str, optional): The ID of the user for whom weight data should be fetched.
     """
 
-    def __init__(self, email, password, user_id=None, refresh=60, proxy=None):
+    def __init__(
+        self,
+        email,
+        password,
+        user_id=None,
+        refresh=60,
+        proxy=None,
+        fingerprint: Optional[ClientFingerprint] = None,
+    ):
         """Initialize a new RenphoWeight instance."""
         self.public_key: str = CONF_PUBLIC_KEY
         self.email: str = email
@@ -79,8 +89,15 @@ class RenphoWeight:
         self.auth_in_progress = False
         self.is_polling_active = False
         self.proxy = proxy
+        self._fingerprint: ClientFingerprint = fingerprint or renpho_ios_default()
 
         _LOGGER.info(f"Initializing RenphoWeight instance. Proxy is {'enabled: ' + proxy if proxy else 'disabled.'}")
+
+    def _json_session_headers(self) -> Dict[str, str]:
+        return merge_headers(
+            {"Content-Type": "application/json", "Accept": "application/json"},
+            self._fingerprint,
+        )
 
     @staticmethod
     def get_timestamp() -> int:
@@ -157,11 +174,11 @@ class RenphoWeight:
             raise APIError("Proxy check failed. Aborting authentication.")
         while retries > 0:
             connector = ProxyConnector.from_url(self.proxy) if self.proxy else None
-            async with aiohttp.ClientSession(connector=connector, headers={
-                            "Content-Type": "application/json",
-                            "Accept": "application/json",
-                            "User-Agent": "Renpho/2.1.0 (iPhone; iOS 14.4; Scale/2.1.0; en-US)"
-                        }, timeout=ClientTimeout(total=60)) as session:
+            async with aiohttp.ClientSession(
+                connector=connector,
+                headers=self._json_session_headers(),
+                timeout=ClientTimeout(total=60),
+            ) as session:
 
                 # Re-auth unless caller skips (e.g. GET with token) or this is sign_in.
                 is_sign_in = "sign_in.json" in url
@@ -220,6 +237,8 @@ class RenphoWeight:
         _LOGGER.debug("Validating credentials for user: %s", self.email)
         try:
             return await self.auth()
+        except (AuthenticationError, APIError):
+            raise
         except Exception as e:
             _LOGGER.error("Failed to validate credentials for user: %s. Error: %s", self.email, e)
             raise AuthenticationError(f"Invalid credentials for user {self.email}. Error details: {e}") from e
@@ -253,11 +272,11 @@ class RenphoWeight:
                     raise APIError("Proxy check failed. Aborting authentication.")
                 
                 connector = ProxyConnector.from_url(self.proxy) if self.proxy else None
-                async with aiohttp.ClientSession(connector=connector, headers={
-                                "Content-Type": "application/json",
-                                "Accept": "application/json",
-                                "User-Agent": "Renpho/2.1.0 (iPhone; iOS 14.4; Scale/2.1.0; en-US)"
-                            }, timeout=ClientTimeout(total=60)) as session:
+                async with aiohttp.ClientSession(
+                    connector=connector,
+                    headers=self._json_session_headers(),
+                    timeout=ClientTimeout(total=60),
+                ) as session:
 
                     async with session.request("POST", API_AUTH_URL, json=data) as response:
                         response.raise_for_status()
@@ -286,13 +305,34 @@ class RenphoWeight:
                             else:
                                 self.token = None
                                 raise AuthenticationError("Session key not found in response.")
-                            if 'device_binds_ary' in parsed:
-                                parsed['device_binds_ary'] = [DeviceBind(**device) for device in parsed['device_binds_ary']]
+                            payload = dict(parsed)
+                            if payload.get("id") is None and payload.get("user_id") is not None:
+                                alt = payload["user_id"]
+                                try:
+                                    payload["id"] = int(alt) if not isinstance(alt, int) else alt
+                                except (TypeError, ValueError):
+                                    _LOGGER.warning(
+                                        "Sign-in had user_id=%r but it could not be coerced to int for id.",
+                                        alt,
+                                    )
+                            if 'device_binds_ary' in payload:
+                                payload['device_binds_ary'] = [
+                                    DeviceBind(**device) for device in payload['device_binds_ary']
+                                ]
                             else:
-                                parsed['device_binds_ary'] = []
-                            self.login_data = UserResponse(**parsed)
-                            self.token = parsed["terminal_user_session_key"]
-                            if self.user_id is None:
+                                payload['device_binds_ary'] = []
+                            try:
+                                self.login_data = UserResponse.model_validate(payload)
+                            except ValidationError as err:
+                                _LOGGER.error(
+                                    "Sign-in JSON did not match UserResponse model: %s",
+                                    err,
+                                )
+                                raise AuthenticationError(
+                                    f"Invalid sign-in response shape: {err}"
+                                ) from err
+                            self.token = payload["terminal_user_session_key"]
+                            if self._initial_user_id is None:
                                 uid = self.login_data.get("id", None)
                                 self.user_id = str(uid) if uid is not None else None
                             else:
@@ -307,16 +347,50 @@ class RenphoWeight:
             finally:
                 self.auth_in_progress = False
 
+    async def resolve_account_user_id(self) -> None:
+        """
+        Set user_id from measurements when sign-in did not provide a usable account id and
+        list_scale_user is empty (session-only list.json matches the legacy mobile client).
+        """
+        if self.user_id is not None:
+            return
+        if not self.token:
+            _LOGGER.warning("resolve_account_user_id: no session token; skipping.")
+            return
+        url = (
+            f"{API_MEASUREMENTS_URL}?last_at={self.get_timestamp()}"
+            f"&locale=en&app_id=Renpho&terminal_user_session_key={self.token}"
+        )
+        try:
+            parsed = await self._request("GET", url, skip_auth=True)
+            if not parsed or parsed.get("status_code") != "20000":
+                return
+            last_ary = parsed.get("last_ary") or []
+            if not last_ary:
+                return
+            bid = last_ary[0].get("b_user_id")
+            if bid is not None:
+                self.user_id = str(bid)
+                _LOGGER.info(
+                    "Resolved account user_id from measurements b_user_id=%s (session-only list).",
+                    bid,
+                )
+        except Exception as err:
+            _LOGGER.error("resolve_account_user_id failed: %s", err)
+
     async def get_scale_users(self):
         """
         Fetch the list of users associated with the scale.
         When the API returns an empty scale_users list, account user_id from sign-in is kept.
+        Retries with user_id and last_updated_at when the minimal request returns no rows.
         """
-        url = f"{API_SCALE_USERS_URL}?locale=en&app_id=Renpho&terminal_user_session_key={self.token}"
         configured_user_id = self._initial_user_id is not None
         try:
+            url = (
+                f"{API_SCALE_USERS_URL}?locale=en&app_id=Renpho"
+                f"&terminal_user_session_key={self.token}"
+            )
             parsed = await self._request("GET", url, skip_auth=True)
-
             if not parsed:
                 _LOGGER.error("Failed to fetch scale users.")
                 self.users = []
@@ -328,18 +402,41 @@ class RenphoWeight:
                 self.users = []
                 return self.users
 
-            if not scale_rows:
-                _LOGGER.info(
-                    "Renpho returned empty scale_users; using account user_id from sign-in if set."
-                )
-                self.users = []
+            if scale_rows:
+                self.users = [Users(**user) for user in scale_rows]
+                if not configured_user_id and self.users:
+                    first_uid = self.users[0].user_id
+                    if first_uid is not None:
+                        self.user_id = str(first_uid)
                 return self.users
 
-            self.users = [Users(**user) for user in scale_rows]
-            if not configured_user_id and self.users:
-                first_uid = self.users[0].user_id
-                if first_uid is not None:
-                    self.user_id = str(first_uid)
+            if self.user_id:
+                retry_url = (
+                    f"{API_SCALE_USERS_URL}?user_id={self.user_id}"
+                    f"&last_updated_at={self.get_timestamp()}&locale=en&app_id=Renpho"
+                    f"&terminal_user_session_key={self.token}"
+                )
+                parsed_retry = await self._request("GET", retry_url, skip_auth=True)
+                if parsed_retry:
+                    retry_rows = parsed_retry.get("scale_users")
+                    if retry_rows is None:
+                        _LOGGER.warning("No scale_users key in list_scale_user retry response.")
+                    elif retry_rows:
+                        _LOGGER.info(
+                            "list_scale_user returned users after retry with user_id=%s.",
+                            self.user_id,
+                        )
+                        self.users = [Users(**user) for user in retry_rows]
+                        if not configured_user_id and self.users:
+                            first_uid = self.users[0].user_id
+                            if first_uid is not None:
+                                self.user_id = str(first_uid)
+                        return self.users
+
+            _LOGGER.info(
+                "Renpho returned empty scale_users; using account user_id from sign-in if set."
+            )
+            self.users = []
             return self.users
         except Exception as e:
             _LOGGER.error("Failed to fetch scale users: %s", e)

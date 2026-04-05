@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 class DeviceBind(BaseModel):
     id: int
@@ -22,6 +22,8 @@ class DeviceBind(BaseModel):
         return getattr(self, key, default)
 
 class UserResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     status_code: str
     status_message: str
     terminal_user_session_key: str

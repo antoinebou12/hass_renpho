@@ -18,7 +18,7 @@ from .const import (
     MASS_KILOGRAMS,
     MASS_POUNDS,
 )
-from .api_renpho import RenphoWeight
+from .api_renpho import APIError, AuthenticationError, RenphoWeight
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -72,10 +72,13 @@ async def async_validate_input(hass: HomeAssistant, data: dict) -> dict[str, Any
     await renpho.get_scale_users()
     user_ids = [str(user.user_id) for user in renpho.users if user.user_id is not None]
 
+    if not user_ids:
+        await renpho.resolve_account_user_id()
+
     if not user_ids and renpho.user_id is not None:
         user_ids = [str(renpho.user_id)]
         _LOGGER.info(
-            "No scale_users from API; using account user_id from sign-in for %s",
+            "No scale_users from API; using account user_id for %s",
             data[CONF_EMAIL],
         )
 
@@ -109,6 +112,14 @@ class RenphoConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except CannotConnect as e:
                 errors["base"] = "cannot_connect"
                 _LOGGER.error(f"Cannot connect due to {e.reason}. Details: {e.get_details()}")
+
+            except AuthenticationError as e:
+                errors["base"] = "cannot_connect"
+                _LOGGER.error("Authentication error during setup: %s", e)
+
+            except APIError as e:
+                errors["base"] = "cannot_connect"
+                _LOGGER.error("Renpho API error during setup: %s", e)
 
             except Exception as e:  # pylint: disable=broad-except
                 errors["base"] = "unknown_error"

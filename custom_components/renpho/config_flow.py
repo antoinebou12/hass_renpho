@@ -7,8 +7,6 @@ import voluptuous as vol
 from homeassistant import config_entries, exceptions
 from homeassistant.core import HomeAssistant
 
-from homeassistant.helpers import translation
-
 from .const import (
     CONF_EMAIL,
     CONF_PASSWORD,
@@ -72,7 +70,14 @@ async def async_validate_input(hass: HomeAssistant, data: dict) -> dict[str, Any
     # Fetch and validate scale users
     _LOGGER.info("Fetching scale users associated with the account.")
     await renpho.get_scale_users()
-    user_ids = [user.user_id for user in renpho.users if user.user_id is not None]
+    user_ids = [str(user.user_id) for user in renpho.users if user.user_id is not None]
+
+    if not user_ids and renpho.user_id is not None:
+        user_ids = [str(renpho.user_id)]
+        _LOGGER.info(
+            "No scale_users from API; using account user_id from sign-in for %s",
+            data[CONF_EMAIL],
+        )
 
     if not user_ids:
         _LOGGER.error(f"No users found associated with the account {data[CONF_EMAIL]}")
@@ -98,7 +103,7 @@ class RenphoConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
                 if len(self.user_ids) > 1:
                     return await self.async_step_select_user()
-                self.renpho_temp_data[CONF_USER_ID] = self.user_ids[0]
+                self.renpho_temp_data[CONF_USER_ID] = str(self.user_ids[0])
                 return self.async_create_entry(title=info["title"], data=self.renpho_temp_data)
 
             except CannotConnect as e:
@@ -118,8 +123,7 @@ class RenphoConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_select_user(self, user_input=None):
         errors = {}
         if user_input is not None:
-            self.renpho_temp_data[CONF_USER_ID] = user_input[CONF_USER_ID]
-            data[CONF_USER_ID] = user_input[CONF_USER_ID]
+            self.renpho_temp_data[CONF_USER_ID] = str(user_input[CONF_USER_ID])
             return self.async_create_entry(title=self.renpho_temp_data[CONF_EMAIL], data=self.renpho_temp_data)
 
         user_id_schema = vol.Schema({

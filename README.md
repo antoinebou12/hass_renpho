@@ -242,6 +242,20 @@ Certainly, you can expand the existing table to include the "Unit of Measurement
 | whr_goal_value         | WHR Goal Value         | Numeric   | ratio               | Goals    | Girth Goals |
 | abdomen_goal_value     | Abdomen Goal Value     | Numeric   | cm                  | Goals    | Girth Goals |
 
+## Troubleshooting
+
+- **Legacy Renpho app vs Renpho Health**  
+  This integration uses the **legacy Renpho cloud API** (`renpho.qnclouds.com`) and the same account type as the older **Renpho** mobile app (not **Renpho Health**). Credentials and APIs differ; Renpho Health is not supported here.
+
+- **“No users found” / empty `scale_users`**  
+  Renpho sometimes returns an empty `list_scale_user` list while sign-in and measurements still work. The integration now falls back to the **account user id** from the sign-in response. The hosted API explorer behaves the same: if the list is empty but you are logged in, `/users` returns a single synthetic user built from that account id.
+
+- **Rate limiting and IP blocks**  
+  Polling too often can trigger blocks from Renpho’s servers. Prefer a **moderate refresh interval** (for example several minutes or more). If you use an HTTP proxy, only the proxy path is checked against httpbin; direct mode no longer probes httpbin on every request.
+
+- **Debugging**  
+  Use the OpenAPI docs to verify your account against the same endpoints: [hass-renpho.vercel.app/docs](https://hass-renpho.vercel.app/docs).
+
 ## Roadmap
 
 

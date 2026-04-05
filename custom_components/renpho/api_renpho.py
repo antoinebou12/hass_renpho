@@ -54,7 +54,8 @@ class RenphoWeight:
         self.password: str = password
         if user_id == "":
             user_id = None
-        self.user_id: str = user_id
+        self._initial_user_id: Optional[str] = str(user_id) if user_id is not None else None
+        self.user_id: Optional[str] = self._initial_user_id
         self.refresh = refresh
         self.token: str = None
         self.session = None
@@ -116,25 +117,23 @@ class RenphoWeight:
         """
         Checks if the proxy is working by making a request to a Renpho API endpoint.
         """
-        test_url = 'http://httpbin.org/get'
-    
         if not self.proxy:
-            _LOGGER.info("No proxy configured. Proceeding without proxy.")
-        else:
-            _LOGGER.info(f"Checking proxy connectivity using proxy: {self.proxy}")
-    
+            return True
+
+        test_url = "http://httpbin.org/get"
+        _LOGGER.info("Checking proxy connectivity using proxy: %s", self.proxy)
+
         try:
-            connector = ProxyConnector.from_url(self.proxy) if self.proxy else None
+            connector = ProxyConnector.from_url(self.proxy)
             session = aiohttp.ClientSession(connector=connector)
             async with session.get(test_url) as response:
                 if response.status == 200:
-                    _LOGGER.info("Proxy check successful." if self.proxy else "Direct connection successful.")
+                    _LOGGER.info("Proxy check successful.")
                     return True
-                else:
-                    _LOGGER.error(f"Failed to connect using {'proxy' if self.proxy else 'direct connection'}. HTTP Status: {response.status}")
-                    return False
+                _LOGGER.error("Proxy check failed. HTTP Status: %s", response.status)
+                return False
         except Exception as e:
-            _LOGGER.error(f"Proxy connection failed: {e}")
+            _LOGGER.error("Proxy connection failed: %s", e)
             return False
         finally:
             await session.close()
@@ -164,7 +163,12 @@ class RenphoWeight:
                             "User-Agent": "Renpho/2.1.0 (iPhone; iOS 14.4; Scale/2.1.0; en-US)"
                         }, timeout=ClientTimeout(total=60)) as session:
 
-                if not self.token and not url.endswith("sign_in.json") or not skip_auth:
+                # Re-auth unless caller skips (e.g. GET with token) or this is sign_in.
+                is_sign_in = "sign_in.json" in url
+                need_auth = (not skip_auth) or (
+                    not self.token and not is_sign_in
+                )
+                if need_auth:
                     auth_success = await self.auth()
                     if not auth_success:
                         raise AuthenticationError("Authentication failed. Unable to proceed with the request.")
@@ -192,6 +196,7 @@ class RenphoWeight:
                 except (aiohttp.ClientResponseError, aiohttp.ClientConnectionError) as e:
                     _LOGGER.error(f"Client error: {e}")
                     raise APIError(f"API request failed {method} {url}") from e
+        raise APIError(f"API request exhausted retries: {method} {url}")
 
     @staticmethod
     def encrypt_password(public_key_str, password):
@@ -288,7 +293,10 @@ class RenphoWeight:
                             self.login_data = UserResponse(**parsed)
                             self.token = parsed["terminal_user_session_key"]
                             if self.user_id is None:
-                                self.user_id = self.login_data.get("id", None)
+                                uid = self.login_data.get("id", None)
+                                self.user_id = str(uid) if uid is not None else None
+                            else:
+                                self.user_id = str(self.user_id)
                             return True
             except (aiohttp.ClientResponseError, aiohttp.ClientConnectionError) as e:
                 _LOGGER.error(f"Authentication failed: {e}")
@@ -302,35 +310,41 @@ class RenphoWeight:
     async def get_scale_users(self):
         """
         Fetch the list of users associated with the scale.
+        When the API returns an empty scale_users list, account user_id from sign-in is kept.
         """
         url = f"{API_SCALE_USERS_URL}?locale=en&app_id=Renpho&terminal_user_session_key={self.token}"
-        # Perform the API request
+        configured_user_id = self._initial_user_id is not None
         try:
             parsed = await self._request("GET", url, skip_auth=True)
 
             if not parsed:
                 _LOGGER.error("Failed to fetch scale users.")
-                return Users(
-                    scale_user_id=None,
-                    user_id=None,
-                    mac=None,
-                    index=None,
-                    key=None,
-                    method=None
+                self.users = []
+                return self.users
+
+            scale_rows = parsed.get("scale_users")
+            if scale_rows is None:
+                _LOGGER.warning("No scale_users key in list_scale_user response.")
+                self.users = []
+                return self.users
+
+            if not scale_rows:
+                _LOGGER.info(
+                    "Renpho returned empty scale_users; using account user_id from sign-in if set."
                 )
+                self.users = []
+                return self.users
 
-            # Check if the response is valid and contains 'scale_users'
-            if "scale_users" in parsed:
-                # Update the 'users' attribute with parsed and validated ScaleUser objects
-                self.users = [Users(**user) for user in parsed["scale_users"]]
-            else:
-                _LOGGER.error("Failed to fetch scale users or no scale users found in the response.")
-
-            self.user_id = self.users[0].user_id
+            self.users = [Users(**user) for user in scale_rows]
+            if not configured_user_id and self.users:
+                first_uid = self.users[0].user_id
+                if first_uid is not None:
+                    self.user_id = str(first_uid)
             return self.users
         except Exception as e:
-            _LOGGER.error(f"Failed to fetch scale users: {e}")
-            return []
+            _LOGGER.error("Failed to fetch scale users: %s", e)
+            self.users = []
+            return self.users
 
     async def get_measurements(self):
         """
@@ -573,13 +587,10 @@ class RenphoWeight:
 
 
         if user_id:
-            self.user_id = user_id
+            self.user_id = str(user_id)
 
         try:
             if metric_type == METRIC_TYPE_WEIGHT:
-                if self._last_updated_weight is None or self.weight:
-                    if self.weight_info is not None:
-                        return self.weight_info.get(metric, None)
                 return self.weight_info.get(metric, None) if self.weight_info else None
             elif metric_type == METRIC_TYPE_GIRTH:
                 if self._last_updated_girth is None or self.girth_info is None:
@@ -613,10 +624,10 @@ class RenphoWeight:
         The core polling logic that fetches data and processes it.
         """
         try:
-            asyncio.gather(
-                await self.get_info(),
-                await self.list_girth(),
-                await self.list_girth_goal(),
+            await asyncio.gather(
+                self.get_info(),
+                self.list_girth(),
+                self.list_girth_goal(),
             )
 
             _LOGGER.info("Data fetched successfully.")
@@ -641,7 +652,7 @@ class RenphoWeight:
         try:
             while self.is_polling_active:
                 await self.poll_data()
-                await asyncio.sleep(self.refresh_interval)
+                await asyncio.sleep(self.refresh)
         except asyncio.CancelledError:
             _LOGGER.info("Polling task was cancelled.")
         except Exception as e:

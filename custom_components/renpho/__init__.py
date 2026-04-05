@@ -70,7 +70,7 @@ async def setup_renpho(hass, conf):
     )
     hass.data[DOMAIN] = renpho
     hass.data[CONF_EMAIL] = email
-    hass.data[CONF_USER_ID] = user_id
+    hass.data[CONF_USER_ID] = str(user_id) if user_id not in (None, "") else None
     hass.data[CONF_REFRESH] = refresh
     hass.data[CONF_UNIT_OF_MEASUREMENT] = unit_of_measurement
 

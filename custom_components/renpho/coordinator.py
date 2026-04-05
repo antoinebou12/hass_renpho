@@ -1,14 +1,12 @@
 from datetime import datetime, timedelta
+import asyncio
 import logging
 
-import async_timeout
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
     DataUpdateCoordinator,
     UpdateFailed,
 )
-
-import asyncio
 
 from .const import CONF_EMAIL, CONF_REFRESH, CONF_USER_ID, DOMAIN, CONF_UNIT_OF_MEASUREMENT
 
@@ -41,10 +39,21 @@ class RenphoWeightCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self):
         """Fetch data from API."""
         try:
-            with async_timeout.timeout(self._refresh):
-                await self.api.get_measurements()
-                await self.api.list_girth()
-                await self.api.list_girth_goal()
+            if hasattr(asyncio, "timeout"):
+                async with asyncio.timeout(self._refresh):
+                    await self.api.get_measurements()
+                    await self.api.list_girth()
+                    await self.api.list_girth_goal()
+            else:
+                import async_timeout
+
+                async with async_timeout.timeout(self._refresh):
+                    await self.api.get_measurements()
+                    await self.api.list_girth()
+                    await self.api.list_girth_goal()
+
+            if self.hass.data.get(CONF_USER_ID) is None and self.api.user_id is not None:
+                self.hass.data[CONF_USER_ID] = self.api.user_id
 
             self._last_updated = datetime.now()
         except asyncio.TimeoutError:

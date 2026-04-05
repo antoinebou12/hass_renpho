@@ -42,7 +42,8 @@ This custom component allows you to seamlessly integrate Renpho's weight scale i
 - Navigate to **Configuration > Integrations > Add Integration**.
 - Search for `Renpho` and click to add.
 - Provide your Renpho account email, password, and optionally a `user_id`.
-- Set the refresh rate in milliseconds for how often you want to poll for updates.
+- Set the refresh interval for how often you want to poll for updates.
+- If cloud requests fail from your home network (auth errors or empty data while the app works on cellular), try a **VPN** on the Home Assistant host or set the optional **proxy** field in the integration (HTTP or SOCKS URL). Prefer a trusted VPN or your own proxy; public proxies can see your credentials.
 
 ## Configuration/Customization
 
@@ -52,7 +53,7 @@ If you're using this integration for multiple users, each user should have a uni
 
 ### 2. Refresh Rate
 
-Set how often the component should fetch new data from the Renpho servers. Note: A too frequent refresh rate may result in rate limiting.
+Set how often the component should fetch new data from the Renpho servers (in seconds). Note: A too frequent refresh rate may result in rate limiting.
 
 ## Support
 

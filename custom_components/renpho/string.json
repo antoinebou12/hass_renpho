@@ -7,7 +7,7 @@
                     "password": "Enter your Renpho account password.",
                     "refresh": "Set the data refresh rate in seconds. Default is 60 seconds.",
                     "unit_of_measurement": "Choose the unit of measurement for weight. Options are kilograms (kg) or pounds (lbs).",
-                    "proxy": "Optional: Specify a proxy server to use (e.g., 'http://127.0.0.1:8080')."
+                    "proxy": "Optional proxy URL (http:// or socks5://) if Renpho fails from your network; or use VPN on the Home Assistant host. Public proxies can see your credentials."
                 }
             }
         },

@@ -7,7 +7,7 @@
                     "password": "Ingrese la contraseña de su cuenta Renpho.",
                     "refresh": "Establezca la frecuencia de actualización de los datos en segundos. El valor predeterminado es de 60 segundos.",
                     "unit_of_measurement": "Seleccione la unidad de medida para el peso. Las opciones son kilogramos (kg) o libras (lbs).",
-                    "proxy": "Opcional: Especifique un servidor proxy para usar (por ejemplo, 'http://127.0.0.1:8080')."
+                    "proxy": "URL de proxy opcional (http:// o socks5://) si Renpho falla desde su red; o use VPN en el host de Home Assistant. Los proxies públicos pueden ver sus credenciales."
                 }
             }
         },

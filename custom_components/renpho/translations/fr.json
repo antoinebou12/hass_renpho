@@ -7,7 +7,7 @@
                     "password": "Entrez le mot de passe de votre compte Renpho.",
                     "refresh": "Définissez le taux de rafraîchissement des données en secondes. La valeur par défaut est de 60 secondes.",
                     "unit_of_measurement": "Choisissez l'unité de mesure pour le poids. Les options sont kilogrammes (kg) ou livres (lbs).",
-                    "proxy": "Facultatif : Spécifiez un serveur proxy à utiliser (par exemple, 'http://127.0.0.1:8080')."
+                    "proxy": "URL de proxy facultative (http:// ou socks5://) si Renpho échoue depuis votre réseau ; ou utilisez un VPN sur l’hôte Home Assistant. Les proxys publics peuvent voir vos identifiants."
                 }
             }
         },

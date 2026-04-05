@@ -7,7 +7,7 @@
                     "password": "输入您的Renpho账户密码。",
                     "refresh": "设置数据刷新率，单位为秒。默认值为60秒。",
                     "unit_of_measurement": "选择重量的计量单位。选项为千克（kg）或磅（lbs）。",
-                    "proxy": "可选：指定要使用的代理服务器（例如，'http://127.0.0.1:8080'）。"
+                    "proxy": "可选：若从当前网络无法访问 Renpho，填写代理 URL（http:// 或 socks5://）；或在 Home Assistant 主机上使用 VPN。公共代理可能看到您的账号密码。"
                 }
             }
         },

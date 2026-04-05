@@ -1082,7 +1082,17 @@ API_KEY_NAME = "access_token"
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 
 # Initialize FastAPI and Jinja2
-app = FastAPI(docs_url="/docs", redoc_url=None)
+app = FastAPI(
+    title="Renpho API",
+    description=(
+        "Explores the legacy Renpho cloud API (renpho.qnclouds.com). "
+        "Renpho may block or throttle traffic from some residential, datacenter, or regional IP addresses. "
+        "If requests fail from your network, use a VPN on your egress, or an HTTP/SOCKS proxy you control; "
+        "untrusted public proxies can see your account credentials."
+    ),
+    docs_url="/docs",
+    redoc_url=None,
+)
 
 current_directory = os.path.dirname(os.path.abspath(__file__))
 templates = Jinja2Templates(directory=os.path.join(current_directory, "templates"))

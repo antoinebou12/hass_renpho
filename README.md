@@ -16,8 +16,6 @@ Go to try the API with your data: https://hass-renpho.vercel.app/docs
 Install renpho outdated
 https://github.com/antoinebou12/hass_renpho/assets/13888068/0bf0e48f-0582-462a-b0a2-6572dd63c860
 
-Use http proxy for the app here a list https://hidemy.io/en/proxy-list/?type=s#list
-
 ## Install config
 ![image](https://github.com/antoinebou12/hass_renpho/assets/13888068/b1a90a12-9f57-42ad-adf8-008a6de92880)
 
@@ -36,6 +34,7 @@ Use http proxy for the app here a list https://hidemy.io/en/proxy-list/?type=s#l
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
 - [Configuration](#configuration)
+- [Network access (VPN / proxy)](#network-access-vpn--proxy)
 - [Updates](#updates)
 - [Roadmap](#roadmap)
 - [License](#license)
@@ -67,7 +66,8 @@ renpho:
   email: test@test.com # email address
   password: MySecurePassword # password
   user_id: 123456789 # user id (optional)
-  refresh: 600 # time to poll (ms)
+  refresh: 600 # seconds between polls
+  proxy: http://127.0.0.1:8080 # optional; see Network access (VPN / proxy)
 ```
 
 And then add the sensor platform:
@@ -80,6 +80,17 @@ sensor:
 > :warning: Note: Refresh is the time in seconds to check for updates. Keep in mind that logging in will log you out of the app.
 
 Restart home assistant and you should see the sensors:
+
+### Network access (VPN / proxy)
+
+Renpho’s cloud API (`renpho.qnclouds.com`) may reject, throttle, or behave inconsistently for some **residential, datacenter, or regional IP addresses**. Typical signs are authentication failures, empty data, or HTTP errors from Home Assistant even though the official app works (for example on cellular data).
+
+**Mitigations:**
+
+1. **VPN (host-level):** Run Home Assistant (the host OS, container, or hypervisor) on a VPN so outbound HTTPS uses a different egress. This affects all traffic from that host unless you use split tunneling.
+2. **Proxy (integration-only):** In the UI setup or YAML, set optional **`proxy`** to a URL such as `http://host:port` or `socks5://host:1080` (formats supported by the underlying client). Only this integration’s Renpho requests use the proxy.
+
+Public or free proxies can see your Renpho credentials; prefer a VPN or a proxy you control. For experimentation only, public HTTP proxy lists exist (for example [hidemy.io](https://hidemy.io/en/proxy-list/?type=s#list)); use at your own risk.
 
 ## Supported Metrics
 
@@ -245,7 +256,7 @@ Certainly, you can expand the existing table to include the "Unit of Measurement
   Renpho sometimes returns an empty `list_scale_user` list while sign-in and measurements still work. The integration now falls back to the **account user id** from the sign-in response. The hosted API explorer behaves the same: if the list is empty but you are logged in, `/users` returns a single synthetic user built from that account id.
 
 - **Rate limiting and IP blocks**  
-  Polling too often can trigger blocks from Renpho’s servers. Prefer a **moderate refresh interval** (for example several minutes or more). If you use an HTTP proxy, only the proxy path is checked against httpbin; direct mode no longer probes httpbin on every request.
+  Polling too often can trigger blocks from Renpho’s servers. Prefer a **moderate refresh interval** (for example several minutes or more). Some **home or ISP egress IPs** are also blocked or throttled; see [Network access (VPN / proxy)](#network-access-vpn--proxy). If you configure a proxy, setup validates it via httpbin before Renpho calls.
 
 - **Debugging**  
   Use the OpenAPI docs to verify your account against the same endpoints: [hass-renpho.vercel.app/docs](https://hass-renpho.vercel.app/docs).

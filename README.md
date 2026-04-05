@@ -1,17 +1,11 @@
 # Renpho Weight Home Assistant Component
-# IN DEVELOPPEMENT
 
-![Version](https://img.shields.io/badge/version-v3.0.1-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
-![Build Status](https://img.shields.io/badge/build-passing-brightgreen)
-![HACS Integration](https://img.shields.io/badge/Category-Integration-blue)
-![IoT Class](https://img.shields.io/badge/IoT%20Class-cloud_polling-blue)
-
-[![HACS Badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/integration)
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/antoinebou12/hass_renpho?color=41BDF5&style=for-the-badge)](https://github.com/antoinebou12/hass_renpho/releases/latest)
-[![Integration Usage](https://img.shields.io/badge/dynamic/json?color=41BDF5&style=for-the-badge&logo=home-assistant&label=usage&suffix=%20installs&cacheSeconds=15600&url=https://analytics.home-assistant.io/custom_integrations.json&query=$.hass_renpho.total)](https://analytics.home-assistant.io/custom_integrations.json&query=$.hass_renpho.total)
-
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=antoinebou12&repository=hass_renpho&category=Integration)
+> [!WARNING]
+> This integration is for the old version of the app, so if you are not using the 'outdated' version it will not work.  There are also reports of it not working at all now.
+>
+> While I have all intention to release a new version, I haven't used this for a long time and do not currently have the time, so if you're waiting please be patient.
+>
+> Please see original blog posts [Reverse Engineering the Renpho App](https://neilgaryallen.dev/blog/reverse-engineering-the-renpho-app) and [Renpho to Home Assistant](https://neilgaryallen.dev/blog/renpho-to-home-assistant)
 
 ## Overview
 
@@ -267,6 +261,3 @@ Certainly, you can expand the existing table to include the "Unit of Measurement
    ```
 2. Find a way to prevent logging out from the mobile app upon every login from Home Assistant (if feasible).
 
-## License
-
-MIT License. See `LICENSE` for more information.
